@@ -10,8 +10,6 @@ Dilengkapi dengan aplikasi web interaktif (Flask & Streamlit) dengan fitur detek
 - **Radithya** ([@Radithyaaf](https://github.com/Radithyaaf))
 - **Taufik** ([@attaufik](https://github.com/attaufik))
 
-*Praktikum Machine Learning — D3 Teknik Informatika*
-
 ---
 
 ## 📊 Ringkasan Model & Kinerja
