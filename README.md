@@ -9,7 +9,6 @@ Dilengkapi dengan aplikasi web interaktif (Flask & Streamlit) dengan fitur detek
 ## 👥 Tim Pengembang
 - **Radithya** ([@Radithyaaf](https://github.com/Radithyaaf))
 - **Taufik** ([@attaufik](https://github.com/attaufik))
-- -
 
 *Praktikum Machine Learning — D3 Teknik Informatika*
 
