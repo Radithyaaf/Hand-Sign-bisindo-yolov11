@@ -1,0 +1,26 @@
+# Python artifacts
+__pycache__/
+*.py[cod]
+*$py.class
+*.cache
+
+# Virtual environment
+.venv/
+venv/
+env/
+
+# Large Dataset (2.7GB - 51k images, download from Roboflow Universe)
+dataset/
+
+# Temporary / OS files
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+
+# Large model checkpoints (best.pt in weights/ is kept)
+*.pt
+!weights/best.pt
+
+# User uploads & custom reference cache if needed
+# static/references/*

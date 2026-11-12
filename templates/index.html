@@ -1,0 +1,1239 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>BISINDO Recognition - YOLOv11</title>
+  <!-- Tailwind CSS CDN -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <!-- Lucide Icons -->
+  <script src="https://unpkg.com/lucide@latest"></script>
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          colors: {
+            brand: {
+              50: '#f5f7ff',
+              100: '#ebf0fe',
+              200: '#ced9fd',
+              300: '#b1c3fc',
+              400: '#7696fa',
+              500: '#4f75f7',
+              600: '#3a5ee5',
+              700: '#2b47b8',
+              800: '#22388e',
+              900: '#1c2d6f',
+            }
+          },
+          fontFamily: {
+            sans: ['Inter', 'system-ui', '-apple-system', 'Segoe UI', 'Roboto', 'sans-serif'],
+          }
+        }
+      }
+    }
+  </script>
+  <style>
+    @keyframes pulse-soft {
+      0%, 100% { transform: scale(1); opacity: 0.9; }
+      50% { transform: scale(1.03); opacity: 0.6; }
+    }
+    .guide-box {
+      border: 3px dashed rgba(99, 102, 241, 0.9);
+      border-radius: 1.25rem;
+      box-shadow: 0 0 30px rgba(99, 102, 241, 0.35);
+      animation: pulse-soft 3s ease-in-out infinite;
+    }
+    .scrollbar-thin::-webkit-scrollbar {
+      width: 6px;
+      height: 6px;
+    }
+    .scrollbar-thin::-webkit-scrollbar-thumb {
+      background: #cbd5e1;
+      border-radius: 4px;
+    }
+  </style>
+</head>
+<body class="bg-gradient-to-br from-slate-50 via-indigo-50/30 to-purple-50/40 text-slate-800 min-h-screen font-sans flex flex-col selection:bg-indigo-600 selection:text-white">
+
+  <!-- Top Navbar (Light & Clean) -->
+  <header class="border-b border-slate-200/80 bg-white/90 backdrop-blur-md sticky top-0 z-50 shadow-sm">
+    <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between">
+      <div class="flex items-center space-x-3">
+        <div class="w-10 h-10 rounded-xl bg-gradient-to-tr from-indigo-600 via-indigo-500 to-purple-600 flex items-center justify-center shadow-md shadow-indigo-500/20">
+          <i data-lucide="hand-metal" class="w-6 h-6 text-white"></i>
+        </div>
+        <div>
+          <h1 class="text-base sm:text-lg font-bold tracking-tight text-slate-900 flex items-center gap-2">
+            BISINDO Vision AI
+            <span class="text-[11px] bg-indigo-50 text-indigo-700 font-semibold px-2.5 py-0.5 rounded-full border border-indigo-200">YOLOv11 Nano</span>
+          </h1>
+          <p class="text-[11px] text-slate-500">Pengenal Bahasa Isyarat Indonesia (26 Huruf A - Z)</p>
+        </div>
+      </div>
+
+      <!-- Navigation Tabs (Light Pill Container) -->
+      <nav class="flex items-center space-x-1 sm:space-x-1.5 bg-slate-100 p-1 rounded-xl border border-slate-200 text-xs sm:text-sm font-medium">
+        <button onclick="switchTab('camera')" id="tab-btn-camera" class="px-3 py-1.5 rounded-lg transition flex items-center gap-1.5 bg-indigo-600 text-white shadow-sm font-semibold">
+          <i data-lucide="camera" class="w-4 h-4"></i>
+          <span class="hidden md:inline">Kamera Realtime</span>
+        </button>
+        <button onclick="switchTab('upload')" id="tab-btn-upload" class="px-3 py-1.5 rounded-lg transition flex items-center gap-1.5 text-slate-600 hover:text-slate-900 hover:bg-white/80">
+          <i data-lucide="upload" class="w-4 h-4"></i>
+          <span class="hidden md:inline">Upload Gambar</span>
+        </button>
+        <button onclick="switchTab('guide')" id="tab-btn-guide" class="px-3 py-1.5 rounded-lg transition flex items-center gap-1.5 text-slate-600 hover:text-slate-900 hover:bg-white/80">
+          <i data-lucide="book-open" class="w-4 h-4"></i>
+          <span class="hidden md:inline">Panduan Alfabet</span>
+        </button>
+        <button onclick="switchTab('metrics')" id="tab-btn-metrics" class="px-3 py-1.5 rounded-lg transition flex items-center gap-1.5 text-slate-600 hover:text-slate-900 hover:bg-white/80">
+          <i data-lucide="bar-chart-3" class="w-4 h-4"></i>
+          <span class="hidden md:inline">Hasil Training</span>
+        </button>
+      </nav>
+    </div>
+  </header>
+
+  <!-- Main Container -->
+  <main class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 flex-1 w-full">
+
+    <!-- ============================================== -->
+    <!-- TAB 1: REALTIME WEBCAM CAMERA -->
+    <!-- ============================================== -->
+    <section id="view-camera" class="space-y-6">
+      <div class="grid grid-cols-1 lg:grid-cols-12 gap-6">
+        
+        <!-- Left: Webcam Video Frame -->
+        <div class="lg:col-span-7 flex flex-col space-y-4">
+          <div class="relative bg-slate-950 border border-slate-300 rounded-2xl overflow-hidden aspect-[4/3] sm:aspect-[16/10] flex items-center justify-center shadow-md">
+            
+            <!-- Video Element -->
+            <video id="webcam" autoplay playsinline muted class="w-full h-full object-cover transform -scale-x-100"></video>
+            
+            <!-- Hidden Canvas for frame snapshot -->
+            <canvas id="frameCanvas" class="hidden"></canvas>
+
+            <!-- Hand Guide Overlay Box -->
+            <div id="handGuide" class="absolute inset-0 m-auto w-56 h-56 sm:w-64 sm:h-64 guide-box pointer-events-none flex flex-col items-center justify-between p-3 transition-opacity">
+              <span class="text-[11px] font-bold tracking-wider text-indigo-100 bg-indigo-900/85 px-3 py-0.5 rounded-full border border-indigo-400/40 uppercase shadow-sm">Posisikan Tangan Disini</span>
+              <div class="w-4 h-4 rounded-full bg-indigo-400/70 animate-ping"></div>
+              <span class="text-[10px] text-slate-200 bg-slate-900/85 px-2.5 py-0.5 rounded-full">Tahan 1 detik untuk suara</span>
+            </div>
+
+            <!-- Placeholder saat kamera mati -->
+            <div id="camPlaceholder" class="absolute inset-0 bg-gradient-to-b from-slate-900 to-slate-950 flex flex-col items-center justify-center p-6 text-center space-y-4 z-10">
+              <div class="w-16 h-16 rounded-2xl bg-slate-800 border border-slate-700 flex items-center justify-center text-indigo-400 shadow-inner">
+                <i data-lucide="video-off" class="w-8 h-8"></i>
+              </div>
+              <div>
+                <h3 class="text-base font-bold text-white">Kamera Belum Aktif</h3>
+                <p class="text-xs text-slate-300 mt-1 max-w-sm">Klik tombol "Aktifkan Kamera" untuk mendeteksi isyarat tangan BISINDO secara realtime dengan suara otomatis.</p>
+              </div>
+              <button onclick="startCamera()" class="px-5 py-2.5 bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-500 hover:to-purple-500 text-white rounded-xl font-semibold text-sm flex items-center gap-2 shadow-lg shadow-indigo-600/30 transition transform hover:-translate-y-0.5">
+                <i data-lucide="video" class="w-4 h-4"></i>
+                Aktifkan Kamera
+              </button>
+            </div>
+
+            <!-- Top live badge overlay -->
+            <div id="liveBadgeOverlay" class="absolute top-4 left-4 z-20 flex items-center gap-2 bg-slate-900/85 backdrop-blur-md border border-slate-700 px-3 py-1.5 rounded-xl shadow-lg hidden">
+              <span class="w-2.5 h-2.5 rounded-full bg-emerald-400 animate-pulse"></span>
+              <span class="text-xs font-semibold text-white tracking-wide">LIVE</span>
+              <span class="text-slate-500">|</span>
+              <span id="fpsCounter" class="text-xs text-slate-300">0 FPS</span>
+              <span class="text-slate-500">|</span>
+              <span id="liveLatency" class="text-xs text-indigo-300 font-mono">-- ms</span>
+            </div>
+
+            <!-- Audio notification toast on video -->
+            <div id="audioToast" class="absolute bottom-4 left-4 right-4 z-20 flex items-center justify-center transition-all duration-300 opacity-0 pointer-events-none">
+              <div class="bg-indigo-600 text-white text-xs font-semibold px-4 py-1.5 rounded-full shadow-lg flex items-center gap-2">
+                <i data-lucide="volume-2" class="w-3.5 h-3.5 animate-bounce"></i>
+                <span id="audioToastText">Menyuarakan: Huruf A</span>
+              </div>
+            </div>
+          </div>
+
+          <!-- Camera Controls Bar (Light Card) -->
+          <div class="bg-white border border-slate-200/90 p-4 rounded-2xl flex flex-wrap items-center justify-between gap-3 shadow-sm">
+            <div class="flex items-center gap-2">
+              <button id="btnToggleCam" onclick="toggleCamera()" class="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl font-semibold flex items-center gap-2 transition text-xs sm:text-sm shadow-sm">
+                <i data-lucide="play" class="w-4 h-4"></i>
+                <span>Mulai Kamera</span>
+              </button>
+              <button onclick="toggleMirror()" class="p-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl transition border border-slate-200" title="Flip Mirror">
+                <i data-lucide="flip-horizontal" class="w-4 h-4"></i>
+              </button>
+            </div>
+
+            <div class="flex items-center gap-3 sm:gap-4 text-xs">
+              <!-- Audio Auto-Speak Toggle Button -->
+              <button id="btnToggleAudio" onclick="toggleAutoAudio()" class="px-3 py-1.5 rounded-xl font-semibold flex items-center gap-1.5 transition border border-emerald-300 bg-emerald-50 text-emerald-700 hover:bg-emerald-100 shadow-sm" title="Aktifkan/Nonaktifkan Suara Otomatis">
+                <i id="audioIcon" data-lucide="volume-2" class="w-4 h-4 text-emerald-600"></i>
+                <span id="audioLabel">Suara: ON</span>
+              </button>
+
+              <div class="flex items-center gap-2 text-slate-600 bg-slate-50 px-3 py-1.5 rounded-xl border border-slate-200">
+                <span class="font-medium">Ambang:</span>
+                <input id="confThreshold" type="range" min="30" max="95" value="55" class="w-16 sm:w-20 accent-indigo-600 cursor-pointer" oninput="updateThreshold(this.value)">
+                <span id="thresholdVal" class="text-indigo-600 font-bold font-mono w-7">55%</span>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Right: Realtime Recognition Output (Light Cards) -->
+        <div class="lg:col-span-5 flex flex-col space-y-4">
+          
+          <!-- Big Letter Card (Bright, Vibrant Gradient) -->
+          <div class="bg-gradient-to-br from-indigo-50/70 via-white to-purple-50/60 border border-indigo-100 p-5 rounded-2xl relative overflow-hidden shadow-sm">
+            <div class="flex items-center justify-between text-xs mb-3">
+              <span class="uppercase tracking-wider font-bold text-slate-500 flex items-center gap-1.5">
+                <i data-lucide="sparkles" class="w-3.5 h-3.5 text-indigo-600"></i>
+                Huruf Terdeteksi
+              </span>
+              <span id="detectionStatusBadge" class="px-2.5 py-0.5 rounded-full bg-slate-100 text-slate-600 text-[11px] font-semibold border border-slate-200">Menunggu Input</span>
+            </div>
+
+            <div class="flex items-center space-x-5 py-2">
+              <div class="w-24 h-24 sm:w-28 sm:h-28 rounded-2xl bg-white border-2 border-indigo-200 flex items-center justify-center shadow-md shadow-indigo-100">
+                <span id="livePredictedChar" class="text-6xl sm:text-7xl font-black text-transparent bg-clip-text bg-gradient-to-tr from-indigo-600 to-purple-600 font-mono">?</span>
+              </div>
+              <div class="flex-1 space-y-2.5">
+                <div>
+                  <div class="flex items-baseline justify-between">
+                    <span class="text-xs font-medium text-slate-500">Tingkat Keyakinan</span>
+                    <span id="liveConfidenceText" class="text-xl font-bold text-indigo-700 font-mono">0.0%</span>
+                  </div>
+                  <!-- Confidence progress bar -->
+                  <div class="w-full h-3 bg-slate-100 rounded-full overflow-hidden mt-1.5 border border-slate-200">
+                    <div id="liveConfidenceBar" class="h-full bg-gradient-to-r from-indigo-500 to-purple-600 transition-all duration-150 rounded-full" style="width: 0%"></div>
+                  </div>
+                </div>
+
+                <!-- Hold timer bar for voice feedback -->
+                <div id="voiceHoldContainer" class="hidden">
+                  <div class="flex justify-between text-[10px] text-slate-500 mb-0.5">
+                    <span>Menahan gestur...</span>
+                    <span id="holdPercent">0%</span>
+                  </div>
+                  <div class="w-full h-1.5 bg-slate-200 rounded-full overflow-hidden">
+                    <div id="holdProgressBar" class="h-full bg-emerald-500 transition-all duration-100 rounded-full" style="width: 0%"></div>
+                  </div>
+                </div>
+
+                <div class="flex items-center justify-between">
+                  <p id="liveRecommendation" class="text-xs text-slate-500 italic">Posisikan tangan di dalam kotak.</p>
+                  <button onclick="speakLetter(currentPredictedLetter)" class="text-xs font-semibold text-indigo-600 hover:text-indigo-800 bg-indigo-50 hover:bg-indigo-100 px-2 py-1 rounded-lg border border-indigo-200 flex items-center gap-1 transition" title="Bunyikan Suara Huruf">
+                    <i data-lucide="volume-2" class="w-3.5 h-3.5"></i>
+                    <span>Ucapkan</span>
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Top 5 Classes Probabilities (Light Card) -->
+          <div class="bg-white border border-slate-200/90 p-4 rounded-2xl shadow-sm space-y-3">
+            <h4 class="text-xs font-bold text-slate-700 uppercase tracking-wider flex items-center gap-2">
+              <i data-lucide="list-ordered" class="w-4 h-4 text-indigo-600"></i>
+              Distribusi 5 Probabilitas Tertinggi
+            </h4>
+            <div id="top5Container" class="space-y-2 text-xs">
+              <div class="text-slate-400 italic text-center py-4">Belum ada inferensi aktif</div>
+            </div>
+          </div>
+
+          <!-- Word / Sentence Builder (Rangkai Kata - Light Card) -->
+          <div class="bg-white border border-slate-200/90 p-4 rounded-2xl shadow-sm space-y-3">
+            <div class="flex items-center justify-between">
+              <h4 class="text-xs font-bold text-slate-700 uppercase tracking-wider flex items-center gap-1.5">
+                <i data-lucide="type" class="w-4 h-4 text-indigo-600"></i>
+                Rangkai Kata
+              </h4>
+              <div class="flex items-center gap-2">
+                <!-- Auto-Append Toggle -->
+                <button id="btnToggleAutoAppend" onclick="toggleAutoAppend()" class="px-2.5 py-1 rounded-lg text-xs font-semibold flex items-center gap-1 transition border border-indigo-200 bg-indigo-50 text-indigo-700 hover:bg-indigo-100 shadow-sm" title="Otomatis masukkan huruf saat gestur ditampilkan di kamera">
+                  <i data-lucide="sparkles" class="w-3.5 h-3.5 text-indigo-600"></i>
+                  <span id="autoAppendLabel">Auto-Isi: ON</span>
+                </button>
+                <button onclick="speakCurrentSentence()" class="text-xs text-indigo-600 hover:text-indigo-800 font-semibold flex items-center gap-1 bg-indigo-50 px-2.5 py-1 rounded-lg border border-indigo-200 transition" title="Ucapkan Kalimat Ini">
+                  <i data-lucide="volume-2" class="w-3.5 h-3.5"></i>
+                  <span>Bacakan</span>
+                </button>
+              </div>
+            </div>
+
+            <!-- Display box for constructed text -->
+            <div id="wordBoxContainer" class="p-3.5 bg-slate-50 border border-slate-200 rounded-xl min-h-[52px] flex items-center justify-between shadow-inner transition-all duration-200">
+              <span id="constructedWord" class="font-mono text-base font-extrabold text-indigo-900 tracking-widest break-all"></span>
+              <span id="constructedWordEmpty" class="text-xs text-slate-400 italic">Tahan gestur di kamera untuk auto-rangkai kata...</span>
+            </div>
+
+            <!-- Builder action buttons -->
+            <div class="grid grid-cols-4 gap-2 text-xs">
+              <button onclick="appendCurrentLetter()" class="p-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl font-semibold flex items-center justify-center gap-1 transition shadow-sm">
+                <i data-lucide="plus" class="w-3.5 h-3.5"></i>
+                <span>Tambah</span>
+              </button>
+              <button onclick="appendSpace()" class="p-2 bg-slate-100 hover:bg-slate-200 text-slate-700 border border-slate-200 rounded-xl font-semibold flex items-center justify-center gap-1 transition">
+                <i data-lucide="space" class="w-3.5 h-3.5"></i>
+                <span>Spasi</span>
+              </button>
+              <button onclick="backspaceWord()" class="p-2 bg-slate-100 hover:bg-slate-200 text-slate-700 border border-slate-200 rounded-xl font-semibold flex items-center justify-center gap-1 transition">
+                <i data-lucide="delete" class="w-3.5 h-3.5"></i>
+                <span>Hapus</span>
+              </button>
+              <button onclick="clearWord()" class="p-2 bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 rounded-xl font-semibold flex items-center justify-center gap-1 transition">
+                <i data-lucide="trash-2" class="w-3.5 h-3.5"></i>
+                <span>Reset</span>
+              </button>
+            </div>
+          </div>
+
+        </div>
+      </div>
+    </section>
+
+    <!-- ============================================== -->
+    <!-- TAB 2: UPLOAD GAMBAR -->
+    <!-- ============================================== -->
+    <section id="view-upload" class="space-y-6 hidden">
+      <div class="grid grid-cols-1 lg:grid-cols-12 gap-6">
+        
+        <!-- Left: Upload Area (Light Card) -->
+        <div class="lg:col-span-6 space-y-4">
+          <div class="bg-white border border-slate-200 rounded-2xl p-6 shadow-sm">
+            <h3 class="text-sm font-bold text-slate-900 mb-1 flex items-center gap-2">
+              <i data-lucide="image-plus" class="w-4 h-4 text-indigo-600"></i>
+              Unggah Foto Isyarat BISINDO
+            </h3>
+            <p class="text-xs text-slate-500 mb-4">Pilih atau seret gambar dari perangkat Anda (JPG, PNG, atau WEBP).</p>
+
+            <!-- Drop Zone -->
+            <div id="dropZone" ondragover="handleDragOver(event)" ondragleave="handleDragLeave(event)" ondrop="handleDrop(event)" onclick="document.getElementById('fileInput').click()" 
+                 class="border-2 border-dashed border-slate-300 hover:border-indigo-500 rounded-2xl p-8 text-center cursor-pointer transition bg-slate-50/70 hover:bg-indigo-50/20 flex flex-col items-center justify-center group min-h-[260px]">
+              <input type="file" id="fileInput" accept="image/*" class="hidden" onchange="handleFileSelected(this.files[0])">
+              
+              <div class="w-16 h-16 rounded-2xl bg-white border border-slate-200 flex items-center justify-center text-indigo-600 group-hover:scale-110 group-hover:border-indigo-400 group-hover:shadow-md transition mb-3">
+                <i data-lucide="upload-cloud" class="w-8 h-8"></i>
+              </div>
+              <p class="text-sm font-bold text-slate-800">Klik untuk menjelajah atau seret file ke sini</p>
+              <p class="text-xs text-slate-500 mt-1">Sistem akan otomatis mendeteksi dan membunyikan suara huruf</p>
+            </div>
+
+            <!-- Quick Preset Samples from Test set -->
+            <div class="mt-4 pt-4 border-t border-slate-100">
+              <p class="text-xs text-slate-600 font-semibold mb-2">Atau coba sampel cepat dari dataset:</p>
+              <div id="quickSamplePills" class="flex flex-wrap gap-1.5">
+                <span class="text-xs text-slate-400 italic">Memuat sampel...</span>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Right: Upload Result Analysis (Light Card) -->
+        <div class="lg:col-span-6 space-y-4">
+          <div class="bg-white border border-slate-200 rounded-2xl p-6 shadow-sm">
+            <div class="flex items-center justify-between mb-4">
+              <h3 class="text-sm font-bold text-slate-900 flex items-center gap-2">
+                <i data-lucide="clipboard-check" class="w-4 h-4 text-emerald-600"></i>
+                Hasil Klasifikasi Gambar
+              </h3>
+              <span id="uploadLatencyBadge" class="text-xs font-mono text-slate-500 bg-slate-100 px-2 py-0.5 rounded-full hidden"></span>
+            </div>
+
+            <!-- State Empty -->
+            <div id="uploadEmptyState" class="py-12 flex flex-col items-center justify-center text-center text-slate-400 space-y-3">
+              <div class="w-12 h-12 rounded-xl bg-slate-100 flex items-center justify-center text-slate-400">
+                <i data-lucide="file-question" class="w-6 h-6"></i>
+              </div>
+              <p class="text-xs max-w-xs text-slate-500">Pilih atau seret gambar di sebelah kiri untuk melihat huruf yang terdeteksi beserta suaranya.</p>
+            </div>
+
+            <!-- State Content Result -->
+            <div id="uploadResultContent" class="space-y-5 hidden">
+              <div class="grid grid-cols-1 sm:grid-cols-2 gap-4 items-center">
+                <!-- Preview image -->
+                <div class="aspect-square bg-slate-100 rounded-xl border border-slate-200 overflow-hidden flex items-center justify-center shadow-inner">
+                  <img id="uploadImgPreview" src="" alt="Preview" class="w-full h-full object-contain">
+                </div>
+
+                <!-- Big Result Card -->
+                <div class="bg-gradient-to-br from-indigo-50/80 via-white to-purple-50/50 p-4 rounded-xl border border-indigo-100 flex flex-col justify-center items-center text-center space-y-2.5 shadow-sm">
+                  <span class="text-xs uppercase text-slate-500 font-bold tracking-wider">Huruf Terdeteksi</span>
+                  <div class="w-20 h-20 rounded-2xl bg-white border-2 border-indigo-300 flex items-center justify-center shadow-md shadow-indigo-100">
+                    <span id="uploadPredictedChar" class="text-5xl font-black text-indigo-700 font-mono">--</span>
+                  </div>
+                  
+                  <div class="w-full pt-1">
+                    <div class="flex justify-between text-xs mb-1">
+                      <span class="text-slate-500 font-medium">Confidence</span>
+                      <span id="uploadConfidenceText" class="font-bold text-indigo-700 font-mono">0%</span>
+                    </div>
+                    <div class="w-full h-2.5 bg-slate-200 rounded-full overflow-hidden">
+                      <div id="uploadConfidenceBar" class="h-full bg-gradient-to-r from-indigo-600 to-purple-600 rounded-full" style="width: 0%"></div>
+                    </div>
+                  </div>
+
+                  <!-- Audio Repeat Button for uploaded image -->
+                  <button id="btnSpeakUpload" onclick="speakLetter(lastUploadedLetter)" class="w-full mt-1 px-3 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg text-xs font-semibold flex items-center justify-center gap-1.5 shadow-sm transition">
+                    <i data-lucide="volume-2" class="w-3.5 h-3.5"></i>
+                    <span>Bunyikan Suara Huruf</span>
+                  </button>
+                </div>
+              </div>
+
+              <!-- Top 5 probabilities -->
+              <div class="border-t border-slate-100 pt-4">
+                <h4 class="text-xs font-bold text-slate-700 uppercase tracking-wider mb-2">Top 5 Prediksi</h4>
+                <div id="uploadTop5List" class="space-y-2 text-xs"></div>
+              </div>
+            </div>
+
+          </div>
+        </div>
+
+      </div>
+    </section>
+
+    <!-- ============================================== -->
+    <!-- TAB 3: PANDUAN ALFABET BISINDO (A-Z) -->
+    <!-- ============================================== -->
+    <section id="view-guide" class="space-y-6 hidden">
+      <div class="bg-white border border-slate-200 rounded-2xl p-6 shadow-sm">
+        <div class="flex flex-col sm:flex-row sm:items-center justify-between pb-4 border-b border-slate-100 gap-2">
+          <div>
+            <h3 class="text-base font-bold text-slate-900 flex items-center gap-2">
+              <i data-lucide="book-marked" class="w-5 h-5 text-indigo-600"></i>
+              Galeri & Referensi Isyarat BISINDO (A - Z)
+            </h3>
+            <p class="text-xs text-slate-500 mt-0.5">Panduan bentuk tangan alfabet. Anda dapat mengganti gambar huruf apa pun dengan foto Anda sendiri via tombol 📷 pada tiap kartu.</p>
+          </div>
+          <div class="flex items-center gap-2">
+            <span class="text-xs bg-indigo-50 text-indigo-700 font-semibold px-3 py-1 rounded-full border border-indigo-200 w-fit">26 Kelas Huruf</span>
+          </div>
+        </div>
+
+        <!-- Hidden input for custom reference upload -->
+        <input type="file" id="customRefFileInput" accept="image/*" class="hidden" onchange="handleCustomRefSelected(this.files[0])">
+
+        <!-- Grid Cards 26 Classes -->
+        <div id="alphabetGrid" class="grid grid-cols-2 sm:grid-cols-4 md:grid-cols-6 lg:grid-cols-8 gap-3 pt-6">
+          <div class="col-span-full text-center py-10 text-slate-400 italic">Memuat referensi alfabet...</div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ============================================== -->
+    <!-- TAB 4: METRIK HASIL TRAINING MODEL -->
+    <!-- ============================================== -->
+    <section id="view-metrics" class="space-y-6 hidden">
+      <div class="bg-white border border-slate-200 rounded-2xl p-6 shadow-sm space-y-6">
+        <div class="flex flex-col sm:flex-row sm:items-center justify-between pb-4 border-b border-slate-100 gap-2">
+          <div>
+            <h3 class="text-base font-bold text-slate-900 flex items-center gap-2">
+              <i data-lucide="trending-up" class="w-5 h-5 text-indigo-600"></i>
+              Evaluasi & Grafik Hasil Training (YOLOv11 v2)
+            </h3>
+            <p class="text-xs text-slate-500 mt-0.5">Akurasi 98% (Top-1) dan 99.8% (Top-5) pada 50 epoch pelatihan.</p>
+          </div>
+          <span class="text-xs bg-emerald-50 text-emerald-700 font-bold px-3 py-1 rounded-full border border-emerald-200 w-fit">Akurasi: 98%</span>
+        </div>
+
+        <!-- Metric Graphics Grid -->
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+          
+          <!-- Results.png -->
+          <div class="bg-slate-50 border border-slate-200 rounded-xl p-4 space-y-2 shadow-sm">
+            <h4 class="text-xs font-bold text-slate-800 flex items-center gap-1.5">
+              <i data-lucide="activity" class="w-4 h-4 text-indigo-600"></i>
+              Loss & Akurasi (results.png)
+            </h4>
+            <div class="rounded-lg overflow-hidden border border-slate-200 bg-white aspect-video flex items-center justify-center">
+              <img src="/training_metrics/results.png" alt="Training Results" class="w-full h-full object-contain cursor-pointer hover:opacity-95 transition" onclick="openImageModal(this.src)">
+            </div>
+            <p class="text-[11px] text-slate-500">Penurunan loss dan peningkatan akurasi validasi hingga 98%.</p>
+          </div>
+
+          <!-- Confusion Matrix -->
+          <div class="bg-slate-50 border border-slate-200 rounded-xl p-4 space-y-2 shadow-sm">
+            <h4 class="text-xs font-bold text-slate-800 flex items-center gap-1.5">
+              <i data-lucide="grid" class="w-4 h-4 text-indigo-600"></i>
+              Confusion Matrix Normalized
+            </h4>
+            <div class="rounded-lg overflow-hidden border border-slate-200 bg-white aspect-video flex items-center justify-center">
+              <img src="/training_metrics/confusion_matrix_normalized.png" alt="Confusion Matrix" class="w-full h-full object-contain cursor-pointer hover:opacity-95 transition" onclick="openImageModal(this.src)">
+            </div>
+            <p class="text-[11px] text-slate-500">Korelasi presisi prediksi terhadap seluruh 26 kelas alfabet.</p>
+          </div>
+
+          <!-- Validation Predictions -->
+          <div class="bg-slate-50 border border-slate-200 rounded-xl p-4 space-y-2 md:col-span-2 shadow-sm">
+            <h4 class="text-xs font-bold text-slate-800 flex items-center gap-1.5">
+              <i data-lucide="check-circle-2" class="w-4 h-4 text-emerald-600"></i>
+              Sampel Batch Training
+            </h4>
+            <div class="rounded-lg overflow-hidden border border-slate-200 bg-white max-h-96 flex items-center justify-center">
+              <img src="/training_metrics/train_batch0.jpg" alt="Training Batch 0" class="w-full h-auto object-contain cursor-pointer hover:opacity-95 transition" onclick="openImageModal(this.src)">
+            </div>
+          </div>
+
+        </div>
+      </div>
+    </section>
+
+  </main>
+
+  <!-- Modal for full image view -->
+  <div id="imageModal" class="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 hidden flex items-center justify-center p-4" onclick="closeImageModal()">
+    <div class="relative max-w-4xl max-h-[90vh]">
+      <img id="modalImg" src="" class="rounded-xl border border-slate-200 shadow-2xl max-h-[85vh] object-contain bg-white">
+      <button class="absolute -top-3 -right-3 w-8 h-8 rounded-full bg-white text-slate-700 flex items-center justify-center border border-slate-300 shadow hover:bg-slate-100">
+        <i data-lucide="x" class="w-4 h-4"></i>
+      </button>
+    </div>
+  </div>
+
+  <!-- Footer (Light) -->
+  <footer class="border-t border-slate-200 bg-white py-4 text-center text-xs text-slate-500">
+    <p>Project Machine Learning D3 &bull; BISINDO Hand Sign Recognition with YOLOv11 Nano</p>
+  </footer>
+
+  <!-- Client-side Logic Script -->
+  <script>
+    // Inisialisasi ikon Lucide
+    lucide.createIcons();
+
+    // Tab Navigation
+    function switchTab(tab) {
+      const views = ['camera', 'upload', 'guide', 'metrics'];
+      views.forEach(v => {
+        const viewEl = document.getElementById(`view-${v}`);
+        const btnEl = document.getElementById(`tab-btn-${v}`);
+        if (v === tab) {
+          viewEl.classList.remove('hidden');
+          btnEl.className = "px-3 py-1.5 rounded-lg transition flex items-center gap-1.5 bg-indigo-600 text-white shadow-sm font-semibold";
+        } else {
+          viewEl.classList.add('hidden');
+          btnEl.className = "px-3 py-1.5 rounded-lg transition flex items-center gap-1.5 text-slate-600 hover:text-slate-900 hover:bg-white/80";
+        }
+      });
+      lucide.createIcons();
+
+      if (tab === 'guide' && !window.guideLoaded) {
+        loadAlphabetReference();
+      }
+    }
+
+    // ==========================================
+    // AUDIO / SPEECH SYNTHESIS ENGINE
+    // ==========================================
+    let autoAudioEnabled = true;
+    let lastSpokenLetter = "";
+    let lastSpokenTime = 0;
+    let stableGestureLetter = "";
+    let stableGestureStartTime = 0;
+    const HOLD_REQUIRED_MS = 750; // Tahan gestur 750ms sebelum disuarakan otomatis
+
+    // Web Audio Chime Sound (Synthesizer halus)
+    const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+    function playChime() {
+      try {
+        if (audioCtx.state === 'suspended') {
+          audioCtx.resume();
+        }
+        const osc = audioCtx.createOscillator();
+        const gain = audioCtx.createGain();
+        osc.type = 'sine';
+        osc.frequency.setValueAtTime(587.33, audioCtx.currentTime); // D5
+        osc.frequency.exponentialRampToValueAtTime(880, audioCtx.currentTime + 0.12); // A5
+        gain.gain.setValueAtTime(0.08, audioCtx.currentTime);
+        gain.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + 0.25);
+        osc.connect(gain);
+        gain.connect(audioCtx.destination);
+        osc.start();
+        osc.stop(audioCtx.currentTime + 0.25);
+      } catch (e) {
+        // AudioContext not allowed before user interaction
+      }
+    }
+
+    // Fonetik pembacaan langsung huruf alfabet dalam Bahasa Indonesia (tanpa kata "Huruf")
+    const INDO_LETTER_SOUNDS = {
+      'A': 'A',
+      'B': 'Be',
+      'C': 'Ce',
+      'D': 'De',
+      'E': 'E',
+      'F': 'Ef',
+      'G': 'Ge',
+      'H': 'Ha',
+      'I': 'I',
+      'J': 'Je',
+      'K': 'Ka',
+      'L': 'El',
+      'M': 'Em',
+      'N': 'En',
+      'O': 'O',
+      'P': 'Pe',
+      'Q': 'Ki',
+      'R': 'Er',
+      'S': 'Es',
+      'T': 'Te',
+      'U': 'U',
+      'V': 'Fe',
+      'W': 'We',
+      'X': 'Eks',
+      'Y': 'Ye',
+      'Z': 'Zet'
+    };
+
+    function speakLetter(letter) {
+      if (!letter || letter === "?") return;
+      if (!('speechSynthesis' in window)) return;
+
+      const upper = letter.toUpperCase();
+      const textToSpeak = INDO_LETTER_SOUNDS[upper] || upper;
+      
+      // Batalkan ucapan sebelumnya jika masih antri
+      window.speechSynthesis.cancel();
+
+      playChime();
+
+      const utterance = new SpeechSynthesisUtterance(textToSpeak);
+      utterance.lang = 'id-ID';
+      utterance.rate = 1.05;
+      utterance.pitch = 1.0;
+
+      window.speechSynthesis.speak(utterance);
+      showAudioToast(`Suara: "${upper}"`);
+    }
+
+    function showAudioToast(msg) {
+      const toast = document.getElementById('audioToast');
+      const toastText = document.getElementById('audioToastText');
+      toastText.innerText = msg;
+      toast.classList.remove('opacity-0');
+      toast.classList.add('opacity-100');
+      setTimeout(() => {
+        toast.classList.remove('opacity-100');
+        toast.classList.add('opacity-0');
+      }, 1500);
+    }
+
+    function toggleAutoAudio() {
+      autoAudioEnabled = !autoAudioEnabled;
+      const btn = document.getElementById('btnToggleAudio');
+      const icon = document.getElementById('audioIcon');
+      const label = document.getElementById('audioLabel');
+
+      if (autoAudioEnabled) {
+        btn.className = "px-3 py-1.5 rounded-xl font-semibold flex items-center gap-1.5 transition border border-emerald-300 bg-emerald-50 text-emerald-700 hover:bg-emerald-100 shadow-sm";
+        icon.className = "w-4 h-4 text-emerald-600";
+        label.innerText = "Suara: ON";
+        showAudioToast("Suara otomatis diaktifkan");
+      } else {
+        btn.className = "px-3 py-1.5 rounded-xl font-semibold flex items-center gap-1.5 transition border border-slate-300 bg-slate-100 text-slate-500 hover:bg-slate-200 shadow-sm";
+        icon.className = "w-4 h-4 text-slate-400";
+        label.innerText = "Suara: OFF";
+        showAudioToast("Suara otomatis dinonaktifkan");
+      }
+      lucide.createIcons();
+    }
+
+    // Auto-Append Word Builder State
+    let autoAppendEnabled = true;
+    let lastAppendedLetter = "";
+    let lastAppendedTime = 0;
+
+    function toggleAutoAppend() {
+      autoAppendEnabled = !autoAppendEnabled;
+      const btn = document.getElementById('btnToggleAutoAppend');
+      const label = document.getElementById('autoAppendLabel');
+
+      if (autoAppendEnabled) {
+        btn.className = "px-2.5 py-1 rounded-lg text-xs font-semibold flex items-center gap-1 transition border border-indigo-200 bg-indigo-50 text-indigo-700 hover:bg-indigo-100 shadow-sm";
+        label.innerText = "Auto-Isi: ON";
+        showAudioToast("Auto-Rangkai kata aktif");
+      } else {
+        btn.className = "px-2.5 py-1 rounded-lg text-xs font-semibold flex items-center gap-1 transition border border-slate-300 bg-slate-100 text-slate-500 hover:bg-slate-200 shadow-sm";
+        label.innerText = "Auto-Isi: OFF";
+        showAudioToast("Auto-Rangkai kata nonaktif");
+      }
+      lucide.createIcons();
+    }
+
+    // ==========================================
+    // WEBCAM LOGIC
+    // ==========================================
+    let webcamStream = null;
+    let cameraActive = false;
+    let mirrorMode = true;
+    let streamInterval = null;
+    let confidenceThreshold = 55;
+    let fpsFrames = 0;
+    let fpsLastTime = performance.now();
+    let currentPredictedLetter = "";
+    let lastUploadedLetter = "";
+
+    const videoEl = document.getElementById('webcam');
+    const canvasEl = document.getElementById('frameCanvas');
+    const ctx = canvasEl.getContext('2d');
+    const placeholderEl = document.getElementById('camPlaceholder');
+    const toggleBtnEl = document.getElementById('btnToggleCam');
+    const liveOverlayEl = document.getElementById('liveBadgeOverlay');
+
+    function updateThreshold(val) {
+      confidenceThreshold = parseInt(val);
+      document.getElementById('thresholdVal').innerText = val + '%';
+    }
+
+    function toggleMirror() {
+      mirrorMode = !mirrorMode;
+      if (mirrorMode) {
+        videoEl.classList.add('-scale-x-100');
+      } else {
+        videoEl.classList.remove('-scale-x-100');
+      }
+    }
+
+    async function startCamera() {
+      try {
+        const constraints = {
+          video: {
+            width: { ideal: 640 },
+            height: { ideal: 480 },
+            facingMode: "user"
+          }
+        };
+        webcamStream = await navigator.mediaDevices.getUserMedia(constraints);
+        videoEl.srcObject = webcamStream;
+        await videoEl.play();
+        
+        cameraActive = true;
+        placeholderEl.classList.add('hidden');
+        liveOverlayEl.classList.remove('hidden');
+        toggleBtnEl.innerHTML = '<i data-lucide="square" class="w-4 h-4"></i><span>Hentikan</span>';
+        toggleBtnEl.classList.replace('bg-indigo-600', 'bg-rose-600');
+        toggleBtnEl.classList.replace('hover:bg-indigo-700', 'hover:bg-rose-700');
+        lucide.createIcons();
+
+        // Mulai loop inferensi frame (setiap 120ms = ~8 FPS inferensi)
+        streamInterval = setInterval(captureAndPredictFrame, 125);
+      } catch (err) {
+        console.error("Gagal membuka kamera:", err);
+        alert("Tidak dapat mengakses kamera: " + err.message + "\nPastikan izin webcam diizinkan di peramban Anda.");
+      }
+    }
+
+    function stopCamera() {
+      if (webcamStream) {
+        webcamStream.getTracks().forEach(track => track.stop());
+        webcamStream = null;
+      }
+      if (streamInterval) {
+        clearInterval(streamInterval);
+        streamInterval = null;
+      }
+      cameraActive = false;
+      placeholderEl.classList.remove('hidden');
+      liveOverlayEl.classList.add('hidden');
+      toggleBtnEl.innerHTML = '<i data-lucide="play" class="w-4 h-4"></i><span>Mulai Kamera</span>';
+      toggleBtnEl.classList.replace('bg-rose-600', 'bg-indigo-600');
+      toggleBtnEl.classList.replace('hover:bg-rose-700', 'hover:bg-indigo-700');
+      lucide.createIcons();
+
+      // Reset tampilan
+      document.getElementById('livePredictedChar').innerText = "?";
+      document.getElementById('liveConfidenceText').innerText = "0.0%";
+      document.getElementById('liveConfidenceBar').style.width = "0%";
+      document.getElementById('detectionStatusBadge').innerText = "Kamera Nonaktif";
+      document.getElementById('detectionStatusBadge').className = "px-2.5 py-0.5 rounded-full bg-slate-100 text-slate-500 text-[11px] font-semibold border border-slate-200";
+      document.getElementById('voiceHoldContainer').classList.add('hidden');
+    }
+
+    function toggleCamera() {
+      if (cameraActive) {
+        stopCamera();
+      } else {
+        startCamera();
+      }
+    }
+
+    let isRequestPending = false;
+
+    async function captureAndPredictFrame() {
+      if (!cameraActive || isRequestPending || videoEl.videoWidth === 0) return;
+
+      // Crop area tengah kamera (square fokus 224x224)
+      const vW = videoEl.videoWidth;
+      const vH = videoEl.videoHeight;
+      const size = Math.min(vW, vH) * 0.75;
+      const startX = (vW - size) / 2;
+      const startY = (vH - size) / 2;
+
+      canvasEl.width = 224;
+      canvasEl.height = 224;
+
+      if (mirrorMode) {
+        ctx.save();
+        ctx.scale(-1, 1);
+        ctx.drawImage(videoEl, startX, startY, size, size, -224, 0, 224, 224);
+        ctx.restore();
+      } else {
+        ctx.drawImage(videoEl, startX, startY, size, size, 0, 0, 224, 224);
+      }
+
+      const base64Data = canvasEl.toDataURL('image/jpeg', 0.85);
+
+      isRequestPending = true;
+      const startTime = performance.now();
+
+      try {
+        const resp = await fetch('/api/predict_frame', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ image: base64Data })
+        });
+        
+        if (resp.ok) {
+          const data = await resp.json();
+          renderLivePrediction(data);
+          
+          document.getElementById('liveLatency').innerText = Math.round(data.inference_time_ms) + " ms";
+          
+          fpsFrames++;
+          const now = performance.now();
+          if (now - fpsLastTime >= 1000) {
+            document.getElementById('fpsCounter').innerText = fpsFrames + " FPS";
+            fpsFrames = 0;
+            fpsLastTime = now;
+          }
+        }
+      } catch (e) {
+        console.error("Inference frame error:", e);
+      } finally {
+        isRequestPending = false;
+      }
+    }
+
+    function renderLivePrediction(data) {
+      const top1 = data.top1.toUpperCase();
+      const conf = data.confidence;
+      currentPredictedLetter = top1;
+
+      const charEl = document.getElementById('livePredictedChar');
+      const confTextEl = document.getElementById('liveConfidenceText');
+      const confBarEl = document.getElementById('liveConfidenceBar');
+      const statusBadge = document.getElementById('detectionStatusBadge');
+      const recoEl = document.getElementById('liveRecommendation');
+      const holdContainer = document.getElementById('voiceHoldContainer');
+      const holdBar = document.getElementById('holdProgressBar');
+      const holdPercent = document.getElementById('holdPercent');
+
+      const now = performance.now();
+
+      if (conf >= confidenceThreshold) {
+        charEl.innerText = top1;
+        confTextEl.innerText = conf.toFixed(1) + "%";
+        confBarEl.style.width = conf + "%";
+        confBarEl.className = "h-full bg-gradient-to-r from-indigo-600 via-indigo-500 to-emerald-500 rounded-full transition-all duration-150";
+        statusBadge.innerText = `Terdeteksi: ${top1}`;
+        statusBadge.className = "px-2.5 py-0.5 rounded-full bg-emerald-50 text-emerald-700 text-[11px] font-bold border border-emerald-200";
+        recoEl.innerText = `Gestur "${top1}" stabil (${conf.toFixed(0)}%).`;
+
+        // Logika Suara Otomatis berbasis Durasi Tahan Gestur (Debounce)
+        if (autoAudioEnabled) {
+          if (stableGestureLetter === top1) {
+            const elapsed = now - stableGestureStartTime;
+            const progress = Math.min(100, Math.round((elapsed / HOLD_REQUIRED_MS) * 100));
+            holdContainer.classList.remove('hidden');
+            holdBar.style.width = progress + "%";
+            holdPercent.innerText = progress + "%";
+
+            // Jika gestur berhasil ditahan minimal 750ms
+            if (elapsed >= HOLD_REQUIRED_MS) {
+              const canSpeak = (lastSpokenLetter !== top1 || now - lastSpokenTime > 2500);
+              if (canSpeak) {
+                speakLetter(top1);
+                lastSpokenLetter = top1;
+                lastSpokenTime = now;
+              }
+
+              // Auto-Append ke Rangkai Kata jika aktif
+              if (autoAppendEnabled) {
+                const isDifferentLetter = (lastAppendedLetter !== top1);
+                const hasCooledDown = (now - lastAppendedTime > 2000);
+                if (isDifferentLetter || hasCooledDown) {
+                  constructedText += top1;
+                  updateConstructedWordView();
+                  lastAppendedLetter = top1;
+                  lastAppendedTime = now;
+
+                  // Efek visual flash highlight pada kotak kata
+                  const wordBox = document.getElementById('wordBoxContainer');
+                  if (wordBox) {
+                    wordBox.classList.add('bg-indigo-100', 'border-indigo-400', 'ring-2', 'ring-indigo-300', 'scale-[1.01]');
+                    setTimeout(() => {
+                      wordBox.classList.remove('bg-indigo-100', 'border-indigo-400', 'ring-2', 'ring-indigo-300', 'scale-[1.01]');
+                    }, 350);
+                  }
+                  showAudioToast(`Huruf "${top1}" otomatis masuk ke kata!`);
+                }
+              }
+
+              // Visual feedback hold bar
+              holdBar.style.width = "100%";
+              holdPercent.innerText = "Terekam!";
+            }
+          } else {
+            stableGestureLetter = top1;
+            stableGestureStartTime = now;
+            holdContainer.classList.remove('hidden');
+            holdBar.style.width = "0%";
+            holdPercent.innerText = "0%";
+          }
+        } else {
+          holdContainer.classList.add('hidden');
+        }
+
+      } else {
+        charEl.innerText = "?";
+        confTextEl.innerText = conf.toFixed(1) + "%";
+        confBarEl.style.width = conf + "%";
+        confBarEl.className = "h-full bg-amber-400 rounded-full transition-all duration-150";
+        statusBadge.innerText = "Keyakinan Rendah";
+        statusBadge.className = "px-2.5 py-0.5 rounded-full bg-amber-50 text-amber-700 text-[11px] font-semibold border border-amber-200";
+        recoEl.innerText = `Kemungkinan "${top1}" (${conf.toFixed(0)}%), rapikan posisi tangan.`;
+
+        stableGestureLetter = "";
+        holdContainer.classList.add('hidden');
+
+        // Jika tangan turun/keluar dari kotak (confidence < 40%), reset penanda agar huruf yang sama bisa diinput ulang
+        if (conf < 40) {
+          lastAppendedLetter = "";
+          lastSpokenLetter = "";
+        }
+      }
+
+      // Render Top 5 Distribution (Light Design)
+      const top5Container = document.getElementById('top5Container');
+      top5Container.innerHTML = data.top5.map((item, index) => {
+        const isTop = index === 0 && conf >= confidenceThreshold;
+        return `
+          <div class="flex items-center gap-2">
+            <span class="w-6 font-bold font-mono ${isTop ? 'text-indigo-600' : 'text-slate-600'}">${item.class.toUpperCase()}</span>
+            <div class="flex-1 h-2.5 bg-slate-100 rounded-full overflow-hidden border border-slate-200">
+              <div class="h-full ${isTop ? 'bg-gradient-to-r from-indigo-600 to-purple-600' : 'bg-slate-300'} rounded-full transition-all" style="width: ${item.confidence}%"></div>
+            </div>
+            <span class="w-12 text-right font-mono ${isTop ? 'text-indigo-700 font-bold' : 'text-slate-500'}">${item.confidence.toFixed(1)}%</span>
+          </div>
+        `;
+      }).join('');
+    }
+
+    // ==========================================
+    // WORD BUILDER (RANGKAI KATA)
+    // ==========================================
+    let constructedText = "";
+
+    function updateConstructedWordView() {
+      const wordEl = document.getElementById('constructedWord');
+      const emptyEl = document.getElementById('constructedWordEmpty');
+      if (constructedText.length > 0) {
+        wordEl.innerText = constructedText;
+        emptyEl.classList.add('hidden');
+      } else {
+        wordEl.innerText = "";
+        emptyEl.classList.remove('hidden');
+      }
+    }
+
+    function appendCurrentLetter() {
+      if (currentPredictedLetter && currentPredictedLetter !== "?") {
+        constructedText += currentPredictedLetter;
+        updateConstructedWordView();
+        speakLetter(currentPredictedLetter);
+      }
+    }
+
+    function appendSpace() {
+      if (constructedText.length > 0 && !constructedText.endsWith(" ")) {
+        constructedText += " ";
+        updateConstructedWordView();
+      }
+    }
+
+    function backspaceWord() {
+      if (constructedText.length > 0) {
+        constructedText = constructedText.slice(0, -1);
+        updateConstructedWordView();
+      }
+    }
+
+    function clearWord() {
+      constructedText = "";
+      updateConstructedWordView();
+    }
+
+    function speakCurrentSentence() {
+      if (!constructedText) return;
+      if ('speechSynthesis' in window) {
+        window.speechSynthesis.cancel();
+        playChime();
+        // Ubah ke lowercase agar TTS membaca sebagai kata biasa, bukan akronim (huruf kapital semua dibaca dieja)
+        const textToRead = constructedText.toLowerCase();
+        const utter = new SpeechSynthesisUtterance(textToRead);
+        utter.lang = 'id-ID';
+        utter.rate = 0.95;
+        window.speechSynthesis.speak(utter);
+        showAudioToast(`Membaca kata: "${constructedText}"`);
+      } else {
+        alert("Text-to-Speech tidak didukung di browser ini.");
+      }
+    }
+
+    // ==========================================
+    // UPLOAD GAMBAR LOGIC
+    // ==========================================
+    function handleDragOver(e) {
+      e.preventDefault();
+      document.getElementById('dropZone').classList.add('border-indigo-600', 'bg-indigo-50/40');
+    }
+
+    function handleDragLeave(e) {
+      e.preventDefault();
+      document.getElementById('dropZone').classList.remove('border-indigo-600', 'bg-indigo-50/40');
+    }
+
+    function handleDrop(e) {
+      e.preventDefault();
+      handleDragLeave(e);
+      if (e.dataTransfer.files && e.dataTransfer.files[0]) {
+        handleFileSelected(e.dataTransfer.files[0]);
+      }
+    }
+
+    async function handleFileSelected(file) {
+      if (!file) return;
+
+      const formData = new FormData();
+      formData.append("file", file);
+
+      document.getElementById('uploadEmptyState').classList.add('hidden');
+      document.getElementById('uploadResultContent').classList.remove('hidden');
+      document.getElementById('uploadPredictedChar').innerText = "...";
+      document.getElementById('uploadConfidenceText').innerText = "--";
+
+      try {
+        const startTime = performance.now();
+        const resp = await fetch('/api/predict_upload', {
+          method: 'POST',
+          body: formData
+        });
+
+        if (!resp.ok) {
+          const err = await resp.json();
+          alert("Error: " + (err.error || "Gagal memproses gambar"));
+          return;
+        }
+
+        const data = await resp.json();
+        const detectedChar = data.top1.toUpperCase();
+        lastUploadedLetter = detectedChar;
+        
+        // Update Preview Image
+        document.getElementById('uploadImgPreview').src = data.image_preview;
+        document.getElementById('uploadPredictedChar').innerText = detectedChar;
+        document.getElementById('uploadConfidenceText').innerText = data.confidence.toFixed(1) + "%";
+        document.getElementById('uploadConfidenceBar').style.width = data.confidence + "%";
+
+        const latencyBadge = document.getElementById('uploadLatencyBadge');
+        latencyBadge.innerText = `Inferensi: ${data.inference_time_ms} ms`;
+        latencyBadge.classList.remove('hidden');
+
+        // Otomatis bunyikan suara huruf yang diunggah
+        speakLetter(detectedChar);
+
+        // Top 5 list (Light Design)
+        const top5List = document.getElementById('uploadTop5List');
+        top5List.innerHTML = data.top5.map((item, idx) => `
+          <div class="flex items-center gap-2">
+            <span class="w-6 font-bold font-mono ${idx === 0 ? 'text-indigo-600' : 'text-slate-600'}">${item.class.toUpperCase()}</span>
+            <div class="flex-1 h-2.5 bg-slate-100 rounded-full overflow-hidden border border-slate-200">
+              <div class="h-full ${idx === 0 ? 'bg-gradient-to-r from-indigo-600 to-purple-600' : 'bg-slate-300'} rounded-full" style="width: ${item.confidence}%"></div>
+            </div>
+            <span class="w-12 text-right font-mono ${idx === 0 ? 'text-indigo-700 font-bold' : 'text-slate-500'}">${item.confidence.toFixed(1)}%</span>
+          </div>
+        `).join('');
+
+      } catch (err) {
+        console.error("Upload error:", err);
+        alert("Terjadi kesalahan saat memproses gambar: " + err.message);
+      }
+    }
+
+    // Quick Sample Pills
+    async function loadQuickSamples() {
+      try {
+        const resp = await fetch('/api/alphabet_reference');
+        const data = await resp.json();
+        const pillsContainer = document.getElementById('quickSamplePills');
+        
+        const available = data.alphabet.filter(a => a.has_sample).slice(0, 10);
+        if (available.length === 0) {
+          pillsContainer.innerHTML = '<span class="text-xs text-slate-400">Tidak ada sampel.</span>';
+          return;
+        }
+
+        pillsContainer.innerHTML = available.map(item => `
+          <button onclick="testPresetSample('${item.sample_url}')" class="px-2.5 py-1 bg-white hover:bg-indigo-50 text-slate-700 hover:text-indigo-700 rounded-lg text-xs font-mono font-semibold border border-slate-200 hover:border-indigo-300 shadow-sm transition">
+            Huruf ${item.class.toUpperCase()}
+          </button>
+        `).join('');
+      } catch (e) {
+        console.error("Gagal memuat quick samples:", e);
+      }
+    }
+
+    async function testPresetSample(sampleUrl) {
+      if (!sampleUrl) return;
+      try {
+        const imgBlob = await fetch(sampleUrl).then(r => r.blob());
+        const file = new File([imgBlob], "sample.jpg", { type: "image/jpeg" });
+        handleFileSelected(file);
+      } catch (e) {
+        alert("Gagal memuat sampel gambar: " + e.message);
+      }
+    }
+
+    // ==========================================
+    // TAB 3: PANDUAN ALFABET (A-Z)
+    // ==========================================
+    window.guideLoaded = false;
+    async function loadAlphabetReference() {
+      const grid = document.getElementById('alphabetGrid');
+      try {
+        const resp = await fetch('/api/alphabet_reference');
+        const data = await resp.json();
+        window.guideLoaded = true;
+
+        grid.innerHTML = data.alphabet.map(item => `
+          <div class="bg-white border ${item.is_custom ? 'border-indigo-400 ring-1 ring-indigo-300' : 'border-slate-200'} hover:border-indigo-400 rounded-xl p-2.5 flex flex-col items-center space-y-2 group transition shadow-sm hover:shadow-md relative">
+            ${item.is_custom ? '<span class="absolute top-1.5 left-1.5 text-[9px] bg-indigo-600 text-white font-bold px-1.5 py-0.5 rounded shadow z-10">Kustom</span>' : ''}
+            
+            <div class="aspect-square w-full rounded-lg bg-slate-100 overflow-hidden flex items-center justify-center border border-slate-200/80 relative">
+              ${item.has_sample ? 
+                `<img src="${item.sample_url}" alt="${item.class}" class="w-full h-full object-cover group-hover:scale-105 transition cursor-pointer" onclick="openImageModal(this.src)">` : 
+                `<span class="text-xs text-slate-400">No Image</span>`
+              }
+              
+              <!-- Hover Overlay to Change Photo -->
+              <div class="absolute inset-0 bg-slate-900/50 opacity-0 group-hover:opacity-100 transition flex items-center justify-center gap-1.5">
+                <button onclick="triggerUploadCustomRef('${item.class.toUpperCase()}')" class="px-2 py-1 bg-white text-indigo-700 font-bold rounded-lg text-[10px] shadow hover:bg-indigo-50 flex items-center gap-1" title="Ganti foto dengan file Anda">
+                  <i data-lucide="camera" class="w-3 h-3"></i>
+                  <span>Ganti</span>
+                </button>
+                ${item.is_custom ? `
+                  <button onclick="resetCustomRef('${item.class.toUpperCase()}')" class="p-1 bg-rose-600 text-white rounded-lg text-[10px] shadow hover:bg-rose-700" title="Kembalikan ke foto bawaan dataset">
+                    <i data-lucide="rotate-ccw" class="w-3 h-3"></i>
+                  </button>
+                ` : ''}
+              </div>
+            </div>
+
+            <div class="flex items-center justify-between w-full px-1">
+              <span class="font-bold text-sm text-indigo-700 font-mono">${item.class.toUpperCase()}</span>
+              <div class="flex items-center gap-1">
+                <button onclick="speakLetter('${item.class.toUpperCase()}')" class="p-1 text-slate-400 hover:text-indigo-600 transition" title="Bunyikan Suara">
+                  <i data-lucide="volume-2" class="w-3.5 h-3.5"></i>
+                </button>
+                ${item.has_sample ? `
+                  <button onclick="switchTab('upload'); testPresetSample('${item.sample_url}')" class="text-[10px] text-indigo-600 hover:underline font-semibold" title="Uji Gambar Ini">
+                    Uji &rarr;
+                  </button>
+                ` : ''}
+              </div>
+            </div>
+          </div>
+        `).join('');
+        lucide.createIcons();
+      } catch (e) {
+        grid.innerHTML = '<div class="col-span-full text-center text-rose-500">Gagal memuat referensi alfabet.</div>';
+      }
+    }
+
+    // Custom Reference Image Upload Handler
+    let currentUploadLetterRef = "";
+    function triggerUploadCustomRef(letter) {
+      currentUploadLetterRef = letter;
+      document.getElementById('customRefFileInput').click();
+    }
+
+    async function handleCustomRefSelected(file) {
+      if (!file || !currentUploadLetterRef) return;
+      const formData = new FormData();
+      formData.append("file", file);
+      formData.append("class", currentUploadLetterRef);
+
+      showAudioToast(`Mengunggah foto baru untuk Huruf ${currentUploadLetterRef}...`);
+
+      try {
+        const resp = await fetch('/api/upload_custom_reference', {
+          method: 'POST',
+          body: formData
+        });
+
+        if (!resp.ok) {
+          const err = await resp.json();
+          alert("Gagal mengunggah foto: " + (err.error || "Terjadi kesalahan"));
+          return;
+        }
+
+        const data = await resp.json();
+        showAudioToast(`Foto Huruf "${currentUploadLetterRef}" berhasil diganti!`);
+        loadAlphabetReference();
+        loadQuickSamples();
+      } catch (e) {
+        alert("Error: " + e.message);
+      } finally {
+        document.getElementById('customRefFileInput').value = "";
+      }
+    }
+
+    async function resetCustomRef(letter) {
+      if (!confirm(`Kembalikan foto huruf ${letter} ke default bawaan dataset?`)) return;
+      try {
+        const resp = await fetch('/api/reset_custom_reference', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ class: letter })
+        });
+        if (resp.ok) {
+          showAudioToast(`Foto Huruf "${letter}" dikembalikan ke default.`);
+          loadAlphabetReference();
+          loadQuickSamples();
+        }
+      } catch (e) {
+        alert("Error: " + e.message);
+      }
+    }
+
+    // Image Modal Logic
+    function openImageModal(src) {
+      document.getElementById('modalImg').src = src;
+      document.getElementById('imageModal').classList.remove('hidden');
+    }
+
+    function closeImageModal() {
+      document.getElementById('imageModal').classList.add('hidden');
+    }
+
+    // Inisialisasi awal
+    document.addEventListener("DOMContentLoaded", () => {
+      loadQuickSamples();
+    });
+  </script>
+</body>
+</html>
